@@ -37,7 +37,7 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
 	}
-	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
 
 	request := "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
 	_, err = conn.Write([]byte(request))
@@ -53,6 +53,23 @@ func TestServer(t *testing.T) {
 
 	response := string(buffer[:num])
 	fmt.Println("Response from server:", response)
+
+	//clear buffer
+	buffer = make([]byte, 4096)
+	request = "PUT /resource HTTP/1.1\r\nHost: localhost\r\n\r\n"
+	_, err = conn.Write([]byte(request))
+	if err != nil {
+		t.Fatalf("Failed to write to server: %v", err)
+	}
+	//read
+	num, err = conn.Read(buffer)
+	if err != nil {
+		t.Fatalf("Failed to read from server: %v", err)
+	}
+	//output
+	response = string(buffer[:num])
+	fmt.Println("Response from server:", response)
+	conn.Close()
 }
 
 // TestParseTop tests the parseTop function.
