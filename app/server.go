@@ -39,8 +39,12 @@ func startServer() {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
-	handleParseRequest(l)
+	//do while loop
+	for {
+		handleParseRequest(l)
+	}
 }
+
 func handleParseRequest(listener net.Listener) {
 	conn, err := listener.Accept()
 	if err != nil {
@@ -50,33 +54,38 @@ func handleParseRequest(listener net.Listener) {
 	defer conn.Close()
 
 	conn.SetDeadline(time.Now().Add(200 * time.Second))
-	input := make([]byte, 4096)
-	num, err := conn.Read(input)
-	if err != nil {
-		fmt.Println("Error reading data: ", err.Error())
-		os.Exit(1)
+	for {
+		input := make([]byte, 4096)
+		num, err := conn.Read(input)
+		if err != nil {
+			fmt.Println("Error reading data: ", err.Error())
+			os.Exit(1)
+		}
+
+		//split the input into lines
+		lines := string(input[:num])
+		linearr := strings.Split(lines, "\r\n")
+		http_top := linearr[0]
+		http_method, http_path, http_version := parseTop(http_top, conn)
+
+		//check if connection is closed
+		if conn == nil {
+			return
+		}
+		http_method = http_method + ""
+		http_path = http_path + ""
+		http_version = http_version + ""
+
+		//remove the first line
+		linearr = linearr[1:]
+		headers, body := parseRequest(linearr, conn)
+		if conn == nil {
+			return
+		}
+		// headers = append(headers, http_header{name: "Connection", value: "close"})
+		body.content = body.content + ""
+		handleRequest(http_method, http_path, http_version, headers, body, conn)
 	}
-
-	//split the input into lines
-	lines := string(input[:num])
-	linearr := strings.Split(lines, "\r\n")
-	http_top := linearr[0]
-	http_method, http_path, http_version := parseTop(http_top, conn)
-
-	//check if connection is closed
-	if conn == nil {
-		return
-	}
-	http_method = http_method + ""
-	http_path = http_path + ""
-	http_version = http_version + ""
-
-	//remove the first line
-	linearr = linearr[1:]
-	headers, body := parseRequest(linearr, conn)
-	// headers = append(headers, http_header{name: "Connection", value: "close"})
-	body.content = body.content + ""
-	handleRequest(http_method, http_path, http_version, headers, body, conn)
 }
 func parseRequest(linearr []string, conn net.Conn) ([]http_header, http_body) {
 	headers := []http_header{}
@@ -140,7 +149,10 @@ func httpTopLength(arr []string) bool {
 func handleHttpError(test bool, message string, conn net.Conn) bool {
 	//assert the test
 	if !test {
-		conn.Write([]byte("HTTP/1.1 " + message + "\r\n"))
+		_, err := conn.Write([]byte("HTTP/1.1 " + message + "\r\n"))
+		if err != nil {
+			fmt.Println("Error writing to connection: ", err.Error())
+		}
 		conn.Close()
 		return true
 	}
@@ -158,8 +170,14 @@ func handleRequest(http_method string, http_path string, http_version string,
 	//handle the request
 	switch http_method + " " + http_path {
 	case GET + " /":
-		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		_, err := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		if err != nil {
+			fmt.Println("Error writing to connection: ", err.Error())
+		}
 	default:
-		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		_, err := conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		if err != nil {
+			fmt.Println("Error writing to connection: ", err.Error())
+		}
 	}
 }
