@@ -156,5 +156,14 @@ func checkVersion(http_version string) bool {
 func handleRequest(http_method string, http_path string, http_version string,
 	headers []http_header, body http_body, conn net.Conn) {
 	//handle the request
-	conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+	if http_method == GET && http_path == "/" {
+		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		return
+	}
+	switch http_method + " " + http_path {
+	case GET + " /":
+		conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	default:
+		conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+	}
 }
