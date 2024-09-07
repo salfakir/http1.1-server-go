@@ -70,6 +70,7 @@ func TestIsValidMethod(t *testing.T) {
 //		conn.Close()
 //	}
 func TestCloseAndOpenConn(t *testing.T) {
+	//test
 	conn, err := net.Dial("tcp", "localhost:4221")
 	if err != nil {
 		t.Fatalf("Failed to connect to server: %v", err)
