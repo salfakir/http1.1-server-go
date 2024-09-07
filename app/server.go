@@ -169,7 +169,6 @@ func checkVersion(http_version string) bool {
 }
 func handleRequest(http_method string, http_path string, http_version string,
 	headers []http_header, body http_body, conn net.Conn) {
-	//handle the request
 	switch http_method + " " + http_path {
 	case GET + " /":
 		_, err := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
