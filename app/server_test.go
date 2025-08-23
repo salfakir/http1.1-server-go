@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -174,6 +175,58 @@ func TestHelloGetRequest(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
+	}
+	fmt.Println("\nResponse Body:")
+	fmt.Println(string(body))
+}
+func TestEchoGetRequest(t *testing.T) {
+	// Create a client
+	client := &http.Client{}
+	randString := "printthisout!][()}+jli"
+	uri := url.QueryEscape(randString)
+
+	// Build a request
+	req, err := http.NewRequest("GET", "http://localhost:4221/echo/"+uri, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Add some custom request headers
+	req.Header.Set("User-Agent", "MyGoClient/1.0")
+	req.Header.Set("Accept", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// ---- Print Response Info ----
+	// Status code
+	fmt.Println("Status:", resp.Status)
+	fmt.Println("StatusCode:", resp.StatusCode)
+
+	// Response headers
+	fmt.Println("\nResponse Headers:")
+	for key, values := range resp.Header {
+		for _, v := range values {
+			fmt.Printf("%s: %s\n", key, v)
+		}
+	}
+
+	// Response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	sbody := string(body)
+	//urldecode
+	if sbody != randString {
+		sbody, _ = url.QueryUnescape(sbody)
+	}
+	if sbody != randString {
+		panic("Response body does not match the expected string, got " + sbody + ", expected " + randString)
 	}
 	fmt.Println("\nResponse Body:")
 	fmt.Println(string(body))

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -218,19 +219,49 @@ func handleRequest(req http_request, conn net.Conn) {
 	}
 }
 func handleGet(req http_request, conn net.Conn) {
-	switch req.http_path {
-	case "/index.html":
-	case "/":
-		_, err := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
-		if err != nil {
-			fmt.Println("Error writing to connection: ", err.Error())
-		}
-		fmt.Println("response for GET /")
-	default:
+	if req.http_path == "/index.html" || req.http_path == "/index.htm" {
+		handleResponse("HTTP/1.1 200 OK",
+			[]http_header{http_header{name: "Content-Type", value: "text/html"}},
+			http_body{content: "<html><body><h1>Welcome to the index page!</h1></body></html>"},
+			conn)
+		fmt.Println("response for GET /index.html")
+		return
+	} else if regexp.MustCompile(`^/echo/[a-zA-Z0-9_\-%\(\)';:\+\*\$=\[\]]+$`).MatchString(req.http_path) {
+		parts := strings.Split(req.http_path, "/")
+		echo := parts[2]
+		length := len(echo)
+		handleResponse("HTTP/1.1 200 OK",
+			[]http_header{
+				http_header{name: "Content-Type", value: "text/plain"},
+				http_header{name: "Content-Length", value: strconv.Itoa(length)},
+			},
+			http_body{content: echo},
+			conn,
+		)
+
+		return
+	} else {
 		_, err := conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 		if err != nil {
 			fmt.Println("Error writing to connection: ", err.Error())
 		}
 		fmt.Println("response for 404")
+	}
+}
+func handleResponse(top string, headers []http_header, body http_body, conn net.Conn) {
+	//debug
+	fmt.Println("Handling response: ", top)
+	fmt.Println("Headers: ")
+	for _, header := range headers {
+		fmt.Println("  ", header.name, ":", header.value)
+	}
+	response := top + "\r\n"
+	for _, header := range headers {
+		response += header.name + ": " + header.value + "\r\n"
+	}
+	response += "\r\n" + body.content + "\r\n\r\n"
+	_, err := conn.Write([]byte(response))
+	if err != nil {
+		fmt.Println("Error writing to connection: ", err.Error())
 	}
 }
