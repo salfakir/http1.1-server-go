@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +28,23 @@ type http_header struct {
 type http_body struct {
 	//define the struct for the body
 	content string
+}
+type http_error struct {
+	code     int
+	message  string
+	location *error_location
+}
+type error_location struct {
+	file string
+	line int
+	ok   bool
+}
+type http_request struct {
+	http_method  string
+	http_path    string
+	http_version string
+	headers      []http_header
+	body         http_body
 }
 
 func main() {
@@ -61,6 +80,10 @@ func handleParseRequest(conn net.Conn) {
 	num, err := conn.Read(input)
 
 	if err != nil {
+		if err.Error() == "EOF" {
+			// Connection closed by client
+			return
+		}
 		fmt.Println("Error reading data: ", err.Error())
 		return
 	}
@@ -69,27 +92,31 @@ func handleParseRequest(conn net.Conn) {
 	lines := string(input[:num])
 	linearr := strings.Split(lines, "\r\n")
 	http_top := linearr[0]
-	http_method, http_path, http_version := parseTop(http_top, conn)
-
-	//check if connection is closed
-	if conn == nil {
+	http_method, http_path, http_version, http_error := parseTop(http_top)
+	if http_error.code != 0 {
+		handleHttpError(http_error, conn)
 		return
 	}
+
 	http_method = http_method + ""
 	http_path = http_path + ""
 	http_version = http_version + ""
 
 	//remove the first line
 	linearr = linearr[1:]
-	headers, body := parseRequest(linearr, conn)
-	if conn == nil {
+	headers, body, http_error := parseRequest(linearr)
+	if http_error.code != 0 {
+		handleHttpError(http_error, conn)
 		return
 	}
 	// headers = append(headers, http_header{name: "Connection", value: "close"})
 	body.content = body.content + ""
-	handleRequest(http_method, http_path, http_version, headers, body, conn)
+	req := http_request{
+		http_method, http_path, http_version, headers, body,
+	}
+	handleRequest(req, conn)
 }
-func parseRequest(linearr []string, conn net.Conn) ([]http_header, http_body) {
+func parseRequest(linearr []string) ([]http_header, http_body, http_error) {
 	headers := []http_header{}
 	body := http_body{}
 	isCurrentlyHeaders := true
@@ -105,34 +132,39 @@ func parseRequest(linearr []string, conn net.Conn) ([]http_header, http_body) {
 		}
 		if isCurrentlyHeaders {
 			parts := strings.Split(line, ":")
-			if handleHttpError(len(parts) == 2, "400 Bad Request", conn) {
-				return nil, http_body{}
+			if len(parts) < 2 {
+				_, file, line, ok := runtime.Caller(1)
+				return nil, http_body{}, http_error{400, "Bad Request", &error_location{file, line, ok}}
 			}
+			headervalue := strings.Join(parts[1:], ":")
 			headers = append(headers,
 				http_header{name: parts[0],
-					value: strings.TrimSpace(parts[1])})
+					value: strings.TrimSpace(headervalue)})
 		} else {
 			body.content = line
 		}
 	}
-	return headers, body
+	return headers, body, http_error{0, "", nil}
 }
-func parseTop(http_top string, conn net.Conn) (string, string, string) {
+func parseTop(http_top string) (string, string, string, http_error) {
 	//parse the top line
 	arr := strings.Split(http_top, " ")
-	if handleHttpError(httpTopLength(arr), "400 Bad Request", conn) {
-		return "", "", ""
+	if !httpTopLength(arr) {
+		_, file, line, ok := runtime.Caller(1)
+		return "", "", "", http_error{400, "Bad Request", &error_location{file, line, ok}}
 	}
 	http_method := arr[0]
-	if handleHttpError(isValidMethod(http_method), "405 Method Not Allowed", conn) {
-		return "", "", ""
+	if !isValidMethod(http_method) {
+		_, file, line, ok := runtime.Caller(1)
+		return "", "", "", http_error{405, "Method Not Allowed", &error_location{file, line, ok}}
 	}
 	http_path := arr[1]
 	http_version := arr[2]
-	if handleHttpError(checkVersion(http_version), "505 HTTP Version Not Supported", conn) {
-		return "", "", ""
+	if !checkVersion(http_version) {
+		_, file, line, ok := runtime.Caller(1)
+		return "", "", "", http_error{505, "HTTP Version Not Supported", &error_location{file, line, ok}}
 	}
-	return http_method, http_path, http_version
+	return http_method, http_path, http_version, http_error{0, "", nil}
 }
 func isValidMethod(http_method string) bool {
 	//check if the method is valid
@@ -143,22 +175,28 @@ func isValidMethod(http_method string) bool {
 	return false
 }
 func httpTopLength(arr []string) bool {
-	if len(arr) != 3 {
-		return false
-	}
-	return true
-}
-func handleHttpError(test bool, message string, conn net.Conn) bool {
-	//assert the test
-	if !test {
-		_, err := conn.Write([]byte("HTTP/1.1 " + message + "\r\n"))
-		if err != nil {
-			fmt.Println("Error writing to connection: ", err.Error())
-		}
-		conn.Close()
+	if len(arr) == 3 {
 		return true
 	}
 	return false
+}
+
+func handleHttpError(he http_error, conn net.Conn) {
+	message := he.message
+	code := he.code
+	line := ""
+	file := ""
+	if he.location != nil && he.location.ok {
+		line = strconv.Itoa(he.location.line)
+		file = he.location.file
+	}
+	fmt.Println("[" + file + ":" + line + "] Error parsing request(" + strconv.Itoa(he.code) + "): " + he.message)
+
+	_, err := conn.Write([]byte("HTTP/1.1 " + strconv.Itoa(code) + " " + message + "\r\n\r\n"))
+	if err != nil {
+		fmt.Println("Error writing to connection: ", err.Error())
+	}
+	conn.Close()
 }
 func checkVersion(http_version string) bool {
 	//check the version
@@ -167,10 +205,22 @@ func checkVersion(http_version string) bool {
 	}
 	return true
 }
-func handleRequest(http_method string, http_path string, http_version string,
-	headers []http_header, body http_body, conn net.Conn) {
-	switch http_method + " " + http_path {
-	case GET + " /":
+func handleRequest(req http_request, conn net.Conn) {
+	//debug
+	fmt.Println("Handling request: ", req.http_method, req.http_path, req.http_version)
+	fmt.Println("Headers: ")
+	for _, header := range req.headers {
+		fmt.Println("  ", header.name, ":", header.value)
+	}
+	switch req.http_method {
+	case GET:
+		handleGet(req, conn)
+	}
+}
+func handleGet(req http_request, conn net.Conn) {
+	switch req.http_path {
+	case "/index.html":
+	case "/":
 		_, err := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 		if err != nil {
 			fmt.Println("Error writing to connection: ", err.Error())
