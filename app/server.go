@@ -240,6 +240,23 @@ func handleGet(req http_request, conn net.Conn) {
 		)
 
 		return
+	} else if req.http_path == "/user-agent" {
+		echo := ""
+		for _, header := range req.headers {
+			if strings.ToLower(header.name) == "user-agent" {
+				echo = header.value
+				break
+			}
+		}
+		handleResponse("HTTP/1.1 200 OK",
+			[]http_header{
+				http_header{name: "Content-Type", value: "text/plain"},
+				http_header{name: "Content-Length", value: strconv.Itoa(len(echo))},
+			},
+			http_body{content: echo},
+			conn,
+		)
+		return
 	} else {
 		_, err := conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 		if err != nil {

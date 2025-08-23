@@ -231,3 +231,52 @@ func TestEchoGetRequest(t *testing.T) {
 	fmt.Println("\nResponse Body:")
 	fmt.Println(string(body))
 }
+func TestEchoHeaderGetRequest(t *testing.T) {
+	// Create a client
+	client := &http.Client{}
+
+	// Build a request
+	req, err := http.NewRequest("GET", "http://localhost:4221/user-agent", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Add some custom request headers
+	useragent := "MyGoClient/1.0"
+	req.Header.Set("User-Agent", useragent)
+	req.Header.Set("Accept", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// ---- Print Response Info ----
+	// Status code
+	fmt.Println("Status:", resp.Status)
+	fmt.Println("StatusCode:", resp.StatusCode)
+
+	// Response headers
+	fmt.Println("\nResponse Headers:")
+	for key, values := range resp.Header {
+		for _, v := range values {
+			fmt.Printf("%s: %s\n", key, v)
+		}
+	}
+
+	// Response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	sbody := string(body)
+	//urldecode
+	sbody, _ = url.QueryUnescape(sbody)
+	if sbody != useragent {
+		panic("Response body does not match the expected string, got " + sbody + ", expected " + useragent)
+	}
+	fmt.Println("\nResponse Body:")
+	fmt.Println(string(body))
+}
