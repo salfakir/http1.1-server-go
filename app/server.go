@@ -264,16 +264,19 @@ func handleGet(req http_request, conn net.Conn) {
 		path := "/tmp/" + file
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			handleNotFound(conn)
+			return
 		}
 		f, err := os.Open(path)
 		if err != nil {
 			handleInternalError(conn)
+			return
 		}
 		defer f.Close()
 		content, err := io.ReadAll(f)
 		sc := string(content)
 		if err != nil {
 			handleInternalError(conn)
+			return
 		}
 		length := len(sc)
 		handleResponse("HTTP/1.1 200 OK",
