@@ -145,6 +145,9 @@ func handleParseRequest(conn net.Conn) {
 			http_method, http_path, http_version, headers, body,
 		}
 		handleRequest(req, conn)
+		if ShouldCloseConn(req) {
+			break
+		}
 	}
 }
 func parseRequest(linearr []string) ([]http_header, http_body, http_error) {
@@ -414,4 +417,12 @@ func gzipString(s string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+func ShouldCloseConn(req http_request) bool {
+	for _, header := range req.headers {
+		if strings.ToLower(header.name) == "connection" && strings.ToLower(header.value) == "close" {
+			return true
+		}
+	}
+	return false
 }
