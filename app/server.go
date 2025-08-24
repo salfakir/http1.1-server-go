@@ -355,15 +355,13 @@ func handleResponse(top string, headers []http_header, body http_body, req http_
 	}
 	trimbody := strings.TrimRight(body.content, "\r\n")
 	comp := None
-	if len(trimbody) != 0 {
-		for _, header := range req.headers {
-			if strings.ToLower(header.name) == "content-encoding" {
-				// if header.value == "gzip" {
-				if strings.Contains(strings.ToLower(header.value), "gzip") {
-					comp = Gzip
-				}
-				break
+	for _, header := range req.headers {
+		if strings.ToLower(header.name) == "content-encoding" {
+			// if header.value == "gzip" {
+			if strings.Contains(strings.ToLower(header.value), "gzip") {
+				comp = Gzip
 			}
+			break
 		}
 	}
 	if comp == Gzip {
@@ -375,9 +373,7 @@ func handleResponse(top string, headers []http_header, body http_body, req http_
 		trimbody = gzipString
 		headerstr += "Content-Encoding: gzip\r\n"
 	}
-	if len(trimbody) != 0 {
-		headerstr += "Content-Length: " + strconv.Itoa(len(trimbody)) + "\r\n"
-	}
+	headerstr += "Content-Length: " + strconv.Itoa(len(trimbody)) + "\r\n"
 	response := top + "\r\n"
 	response += headerstr
 	response += "\r\n" + trimbody + "\r\n\r\n"
