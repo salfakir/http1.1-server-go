@@ -362,11 +362,12 @@ func handleResponse(top string, headers []http_header, body http_body, req http_
 	comp := None
 	for _, header := range req.headers {
 		if strings.ToLower(header.name) == "accept-encoding" {
-			// if header.value == "gzip" {
 			if strings.Contains(strings.ToLower(header.value), "gzip") {
 				comp = Gzip
 			}
-			break
+		}
+		if strings.ToLower(header.name) == "connection" && strings.ToLower(header.value) == "close" {
+			headerstr += "Connection: close\r\n"
 		}
 	}
 	if comp == Gzip {
