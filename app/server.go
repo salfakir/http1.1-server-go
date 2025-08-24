@@ -257,6 +257,7 @@ func handlePost(req http_request, conn net.Conn) {
 			fmt.Println("Error writing to file: ", err.Error())
 			handleInternalError(conn)
 		}
+		handleResponse("HTTP/1.1 201 Created", []http_header{}, http_body{}, conn)
 	}
 }
 func handleGet(req http_request, conn net.Conn) {
