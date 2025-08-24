@@ -359,3 +359,32 @@ func TestFileNotFoundGetRequest(t *testing.T) {
 		t.Fatalf("Expected status code 404, got %d", resp.StatusCode)
 	}
 }
+func TestReuseGetRequest(t *testing.T) {
+	client := &http.Client{} // one client manages the connection pool
+
+	// First request
+	req1, err := http.NewRequest("GET", "http://localhost:4221/echo/asdf", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp1, err := client.Do(req1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body1, _ := io.ReadAll(resp1.Body)
+	resp1.Body.Close()
+	fmt.Println("First response:", string(body1))
+
+	// Second request (should reuse same TCP connection if server allows keep-alive)
+	req2, err := http.NewRequest("GET", "http://localhost:4221/echo/qwerty", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp2, err := client.Do(req2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body2, _ := io.ReadAll(resp2.Body)
+	resp2.Body.Close()
+	fmt.Println("Second response:", string(body2))
+}

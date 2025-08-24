@@ -105,45 +105,47 @@ func handleParseRequest(conn net.Conn) {
 	if conn == nil {
 		return
 	}
-	input := make([]byte, 4096)
-	num, err := conn.Read(input)
+	for conn != nil {
+		input := make([]byte, 4096)
+		num, err := conn.Read(input)
 
-	if err != nil {
-		if err.Error() == "EOF" {
-			// Connection closed by client
+		if err != nil {
+			if err.Error() == "EOF" {
+				// Connection closed by client
+				return
+			}
+			fmt.Println("Error reading data: ", err.Error())
 			return
 		}
-		fmt.Println("Error reading data: ", err.Error())
-		return
-	}
 
-	//split the input into lines
-	lines := string(input[:num])
-	linearr := strings.Split(lines, "\r\n")
-	http_top := linearr[0]
-	http_method, http_path, http_version, http_error := parseTop(http_top)
-	if http_error.code != 0 {
-		handleHttpError(http_error, conn)
-		return
-	}
+		//split the input into lines
+		lines := string(input[:num])
+		linearr := strings.Split(lines, "\r\n")
+		http_top := linearr[0]
+		http_method, http_path, http_version, http_error := parseTop(http_top)
+		if http_error.code != 0 {
+			handleHttpError(http_error, conn)
+			return
+		}
 
-	http_method = http_method + ""
-	http_path = http_path + ""
-	http_version = http_version + ""
+		http_method = http_method + ""
+		http_path = http_path + ""
+		http_version = http_version + ""
 
-	//remove the first line
-	linearr = linearr[1:]
-	headers, body, http_error := parseRequest(linearr)
-	if http_error.code != 0 {
-		handleHttpError(http_error, conn)
-		return
+		//remove the first line
+		linearr = linearr[1:]
+		headers, body, http_error := parseRequest(linearr)
+		if http_error.code != 0 {
+			handleHttpError(http_error, conn)
+			return
+		}
+		// headers = append(headers, http_header{name: "Connection", value: "close"})
+		body.content = body.content + ""
+		req := http_request{
+			http_method, http_path, http_version, headers, body,
+		}
+		handleRequest(req, conn)
 	}
-	// headers = append(headers, http_header{name: "Connection", value: "close"})
-	body.content = body.content + ""
-	req := http_request{
-		http_method, http_path, http_version, headers, body,
-	}
-	handleRequest(req, conn)
 }
 func parseRequest(linearr []string) ([]http_header, http_body, http_error) {
 	headers := []http_header{}
