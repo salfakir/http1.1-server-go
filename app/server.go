@@ -220,7 +220,7 @@ func handleRequest(req http_request, conn net.Conn) {
 	}
 }
 func handleGet(req http_request, conn net.Conn) {
-	if req.http_path == "/index.html" || req.http_path == "/index.htm" || req.http_path == "/" {
+	if req.http_path == "/index.html" || req.http_path == "/index.htm" || req.http_path == "/" || req.http_path == "" {
 		handleResponse("HTTP/1.1 200 OK",
 			[]http_header{http_header{name: "Content-Type", value: "text/html"}},
 			http_body{content: "<html><body><h1>Welcome to the index page!</h1></body></html>"},
