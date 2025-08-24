@@ -378,7 +378,7 @@ func handleResponse(top string, headers []http_header, body http_body, req http_
 	headerstr += "Content-Length: " + strconv.Itoa(len(trimbody)) + "\r\n"
 	response := top + "\r\n"
 	response += headerstr
-	response += "\r\n" + trimbody + "\r\n\r\n"
+	response += "\r\n" + trimbody
 
 	_, err := conn.Write([]byte(response))
 	if err != nil {
