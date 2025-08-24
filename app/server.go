@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -257,12 +258,35 @@ func handleGet(req http_request, conn net.Conn) {
 			conn,
 		)
 		return
-	} else {
-		_, err := conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
-		if err != nil {
-			fmt.Println("Error writing to connection: ", err.Error())
+	} else if regexp.MustCompile(`^/files/[a-zA-Z0-9_\-]+$`).MatchString(req.http_path) {
+		file := strings.TrimPrefix(req.http_path, "/files/")
+		file = strings.Trim(file, "/")
+		path := "/tmp/" + file
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			handleNotFound(conn)
 		}
-		fmt.Println("response for 404")
+		f, err := os.Open(path)
+		if err != nil {
+			handleInternalError(conn)
+		}
+		defer f.Close()
+		content, err := io.ReadAll(f)
+		sc := string(content)
+		if err != nil {
+			handleInternalError(conn)
+		}
+		length := len(sc)
+		handleResponse("HTTP/1.1 200 OK",
+			[]http_header{
+				http_header{name: "Content-Type", value: "application/octet-stream"},
+				http_header{name: "Content-Length", value: strconv.Itoa(length)},
+			},
+			http_body{content: sc},
+			conn,
+		)
+		return
+	} else {
+		handleNotFound(conn)
 	}
 }
 func handleResponse(top string, headers []http_header, body http_body, conn net.Conn) {
@@ -274,11 +298,27 @@ func handleResponse(top string, headers []http_header, body http_body, conn net.
 	}
 	response := top + "\r\n"
 	for _, header := range headers {
+		if len(header.name) == 0 || len(header.value) == 0 {
+			continue
+		}
 		response += header.name + ": " + header.value + "\r\n"
 	}
-	response += "\r\n" + body.content + "\r\n\r\n"
+	trimbody := strings.TrimRight(body.content, "\r\n")
+	response += "\r\n" + trimbody + "\r\n\r\n"
 	_, err := conn.Write([]byte(response))
 	if err != nil {
 		fmt.Println("Error writing to connection: ", err.Error())
 	}
+}
+func handleNotFound(conn net.Conn) {
+	handleResponse("HTTP/1.1 404 Not Found",
+		[]http_header{},
+		http_body{content: ""},
+		conn)
+}
+func handleInternalError(conn net.Conn) {
+	handleResponse("HTTP/1.1 500 Internal Server Error",
+		[]http_header{},
+		http_body{content: ""},
+		conn)
 }

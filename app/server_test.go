@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 )
@@ -279,4 +280,82 @@ func TestEchoHeaderGetRequest(t *testing.T) {
 	}
 	fmt.Println("\nResponse Body:")
 	fmt.Println(string(body))
+}
+func TestFileGetRequest(t *testing.T) {
+	//create a file for testing
+	filestr := "this is a test file"
+	filepath := "/tmp/foo"
+	writer, err := os.Create(filepath)
+	io.WriteString(writer, filestr)
+	// Create a client
+	client := &http.Client{}
+
+	// Build a request
+	req, err := http.NewRequest("GET", "http://localhost:4221/files/foo", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Add some custom request headers
+	req.Header.Set("User-Agent", "MyGoClient/1.0")
+	req.Header.Set("Accept", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	// ---- Print Response Info ----
+	// Status code
+	fmt.Println("Status:", resp.Status)
+	fmt.Println("StatusCode:", resp.StatusCode)
+
+	// Response headers
+	fmt.Println("\nResponse Headers:")
+	for key, values := range resp.Header {
+		for _, v := range values {
+			fmt.Printf("%s: %s\n", key, v)
+		}
+	}
+
+	// Response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	sbody := string(body)
+	//urldecode
+	sbody, _ = url.QueryUnescape(sbody)
+	if sbody != filestr {
+		panic("Response body does not match the expected string, got '" + sbody + "', expected '" + filestr + "'")
+	}
+	fmt.Println("\nResponse Body:")
+	fmt.Println(string(body))
+	//try to read a file that does not exist
+}
+func TestFileNotFoundGetRequest(t *testing.T) {
+	// Create a client
+	client := &http.Client{}
+
+	// Build a request
+	req, err := http.NewRequest("GET", "http://localhost:4221/files/asdf", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Add some custom request headers
+	req.Header.Set("User-Agent", "MyGoClient/1.0")
+	req.Header.Set("Accept", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("Expected status code 404, got %d", resp.StatusCode)
+	}
 }
