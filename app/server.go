@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"regexp"
@@ -48,6 +50,13 @@ type http_request struct {
 	headers      []http_header
 	body         http_body
 }
+
+type Compression int
+
+const (
+	None = iota
+	Gzip
+)
 
 var dir string = ""
 
@@ -248,16 +257,16 @@ func handlePost(req http_request, conn net.Conn) {
 		writer, err := os.Create(path)
 		if err != nil {
 			fmt.Println("Error creating file: ", err.Error())
-			handleInternalError(conn)
+			handleInternalError(req, conn)
 			return
 		}
 		defer writer.Close()
 		_, err = io.WriteString(writer, body)
 		if err != nil {
 			fmt.Println("Error writing to file: ", err.Error())
-			handleInternalError(conn)
+			handleInternalError(req, conn)
 		}
-		handleResponse("HTTP/1.1 201 Created", []http_header{}, http_body{}, conn)
+		handleResponse("HTTP/1.1 201 Created", []http_header{}, http_body{}, req, conn)
 	}
 }
 func handleGet(req http_request, conn net.Conn) {
@@ -265,18 +274,18 @@ func handleGet(req http_request, conn net.Conn) {
 		handleResponse("HTTP/1.1 200 OK",
 			[]http_header{http_header{name: "Content-Type", value: "text/html"}},
 			http_body{content: "<html><body><h1>Welcome to the index page!</h1></body></html>"},
+			req,
 			conn)
 		return
 	} else if regexp.MustCompile(`^/echo/[a-zA-Z0-9_\-%\(\)';:\+\*\$=\[\]]+$`).MatchString(req.http_path) {
 		parts := strings.Split(req.http_path, "/")
 		echo := parts[2]
-		length := len(echo)
 		handleResponse("HTTP/1.1 200 OK",
 			[]http_header{
 				http_header{name: "Content-Type", value: "text/plain"},
-				http_header{name: "Content-Length", value: strconv.Itoa(length)},
 			},
 			http_body{content: echo},
+			req,
 			conn,
 		)
 		return
@@ -291,9 +300,9 @@ func handleGet(req http_request, conn net.Conn) {
 		handleResponse("HTTP/1.1 200 OK",
 			[]http_header{
 				http_header{name: "Content-Type", value: "text/plain"},
-				http_header{name: "Content-Length", value: strconv.Itoa(len(echo))},
 			},
 			http_body{content: echo},
+			req,
 			conn,
 		)
 		return
@@ -302,65 +311,108 @@ func handleGet(req http_request, conn net.Conn) {
 		file = strings.Trim(file, "/")
 		path := dir + file
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			handleNotFound(conn)
+			handleNotFound(req, conn)
 			return
 		}
 		f, err := os.Open(path)
 		if err != nil {
-			handleInternalError(conn)
+			handleInternalError(req, conn)
 			return
 		}
 		defer f.Close()
 		content, err := io.ReadAll(f)
 		sc := string(content)
 		if err != nil {
-			handleInternalError(conn)
+			handleInternalError(req, conn)
 			return
 		}
-		length := len(sc)
 		handleResponse("HTTP/1.1 200 OK",
 			[]http_header{
 				http_header{name: "Content-Type", value: "application/octet-stream"},
-				http_header{name: "Content-Length", value: strconv.Itoa(length)},
 			},
 			http_body{content: sc},
+			req,
 			conn,
 		)
 		return
 	} else {
-		handleNotFound(conn)
+		handleNotFound(req, conn)
 	}
 }
-func handleResponse(top string, headers []http_header, body http_body, conn net.Conn) {
+func handleResponse(top string, headers []http_header, body http_body, req http_request, conn net.Conn) {
 	//debug
 	fmt.Println("Handling response: ", top)
 	fmt.Println("Headers: ")
 	for _, header := range headers {
 		fmt.Println("  ", header.name, ":", header.value)
 	}
-	response := top + "\r\n"
+	headerstr := ""
 	for _, header := range headers {
 		if len(header.name) == 0 || len(header.value) == 0 {
 			continue
 		}
-		response += header.name + ": " + header.value + "\r\n"
+		headerstr += header.name + ": " + header.value + "\r\n"
 	}
 	trimbody := strings.TrimRight(body.content, "\r\n")
+	comp := None
+	if len(trimbody) != 0 {
+		for _, header := range req.headers {
+			if strings.ToLower(header.name) == "content-encoding" {
+				if header.value == "gzip" {
+					comp = Gzip
+				}
+				break
+			}
+		}
+	}
+	if comp == Gzip {
+		gzipString, err := gzipString(trimbody)
+		if err != nil {
+			handleInternalError(req, conn)
+			return
+		}
+		trimbody = gzipString
+		headerstr += "Content-Encoding: gzip\r\n"
+	}
+	if len(trimbody) != 0 {
+		headerstr += "Content-Length: " + strconv.Itoa(len(trimbody)) + "\r\n"
+	}
+	response := top + "\r\n"
+	response += headerstr
 	response += "\r\n" + trimbody + "\r\n\r\n"
+
 	_, err := conn.Write([]byte(response))
 	if err != nil {
 		fmt.Println("Error writing to connection: ", err.Error())
 	}
 }
-func handleNotFound(conn net.Conn) {
+func handleNotFound(req http_request, conn net.Conn) {
 	handleResponse("HTTP/1.1 404 Not Found",
 		[]http_header{},
 		http_body{content: ""},
+		req,
 		conn)
 }
-func handleInternalError(conn net.Conn) {
+func handleInternalError(req http_request, conn net.Conn) {
 	handleResponse("HTTP/1.1 500 Internal Server Error",
 		[]http_header{},
 		http_body{content: ""},
+		req,
 		conn)
+}
+func gzipString(s string) (string, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+
+	_, err := gz.Write([]byte(s))
+	if err != nil {
+		return "", err
+	}
+
+	// Always close to flush remaining data
+	if err := gz.Close(); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
