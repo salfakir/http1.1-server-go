@@ -49,10 +49,28 @@ type http_request struct {
 	body         http_body
 }
 
+var dir string = ""
+
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Println("Logs from your program will appear here!")
+	arg := os.Args[1:]
+	handleArgs(arg)
+	//find index of '--port' in arg
 	startServer()
+}
+func handleArgs(arg []string) {
+	for i, v := range arg {
+		if v == "--directory" {
+			if i+1 < len(arg) {
+				dir = arg[i+1]
+				break
+			}
+		}
+	}
+	if dir != "" {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			panic("Directory does not exist: " + dir)
+		}
+	}
 }
 func startServer() {
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
@@ -225,7 +243,6 @@ func handleGet(req http_request, conn net.Conn) {
 			[]http_header{http_header{name: "Content-Type", value: "text/html"}},
 			http_body{content: "<html><body><h1>Welcome to the index page!</h1></body></html>"},
 			conn)
-		fmt.Println("response for GET /index.html")
 		return
 	} else if regexp.MustCompile(`^/echo/[a-zA-Z0-9_\-%\(\)';:\+\*\$=\[\]]+$`).MatchString(req.http_path) {
 		parts := strings.Split(req.http_path, "/")
@@ -239,7 +256,6 @@ func handleGet(req http_request, conn net.Conn) {
 			http_body{content: echo},
 			conn,
 		)
-
 		return
 	} else if req.http_path == "/user-agent" {
 		echo := ""
@@ -261,7 +277,7 @@ func handleGet(req http_request, conn net.Conn) {
 	} else if regexp.MustCompile(`^/files/[a-zA-Z0-9_\-]+$`).MatchString(req.http_path) {
 		file := strings.TrimPrefix(req.http_path, "/files/")
 		file = strings.Trim(file, "/")
-		path := "/tmp/" + file
+		path := dir + file
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			handleNotFound(conn)
 			return
