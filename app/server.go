@@ -235,6 +235,28 @@ func handleRequest(req http_request, conn net.Conn) {
 	switch req.http_method {
 	case GET:
 		handleGet(req, conn)
+	case POST:
+		handlePost(req, conn)
+	}
+}
+func handlePost(req http_request, conn net.Conn) {
+	if regexp.MustCompile(`^/files/[a-zA-Z0-9_\-]+$`).MatchString(req.http_path) {
+		path := strings.TrimPrefix(req.http_path, "/files/")
+		path = strings.Trim(path, "/")
+		path = dir + path
+		body := req.body.content
+		writer, err := os.Create(path)
+		if err != nil {
+			fmt.Println("Error creating file: ", err.Error())
+			handleInternalError(conn)
+			return
+		}
+		defer writer.Close()
+		_, err = io.WriteString(writer, body)
+		if err != nil {
+			fmt.Println("Error writing to file: ", err.Error())
+			handleInternalError(conn)
+		}
 	}
 }
 func handleGet(req http_request, conn net.Conn) {
