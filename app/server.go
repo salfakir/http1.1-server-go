@@ -358,7 +358,8 @@ func handleResponse(top string, headers []http_header, body http_body, req http_
 	if len(trimbody) != 0 {
 		for _, header := range req.headers {
 			if strings.ToLower(header.name) == "content-encoding" {
-				if header.value == "gzip" {
+				// if header.value == "gzip" {
+				if strings.Contains(strings.ToLower(header.value), "gzip") {
 					comp = Gzip
 				}
 				break
